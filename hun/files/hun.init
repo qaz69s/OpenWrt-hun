@@ -1,0 +1,143 @@
+#!/bin/sh /etc/rc.common
+# SPDX-License-Identifier: GPL-3.0-only
+
+USE_PROCD=1
+
+START=99
+STOP=10
+
+readonly NAME="hun"
+readonly PROG="/usr/bin/mihomo"
+readonly LOG="/var/log/hun.log"
+readonly HOME_DIR="/etc/hun"
+readonly CONF="/etc/hun/config.yaml"
+readonly GEOIP_SRC="/usr/share/v2ray/geoip.dat"
+readonly GEOSITE_SRC="/usr/share/v2ray/geosite.dat"
+
+EXTRA_COMMANDS="hot_reload"
+EXTRA_HELP="        hot_reload   Hot-reload $NAME config (restart engine)"
+
+# Ensure log directory exists (/var is tmpfs on OpenWrt)
+_ensure_logdir() {
+	mkdir -p "$(dirname "$LOG")"
+}
+
+# Ensure geoip/geosite data exist in mihomo working dir (-d /etc/hun)。
+# mihomo 以 geodata-mode 读 home 目录下的 geoip.dat/geosite.dat，
+# 包 DEPENDS v2ray-geoip/v2ray-geosite，这里软链过去。
+_ensure_geodata() {
+	mkdir -p "$HOME_DIR"
+	[ -f "$HOME_DIR/geoip.dat" ] || ln -sf "$GEOIP_SRC" "$HOME_DIR/geoip.dat" 2>/dev/null
+	[ -f "$HOME_DIR/geosite.dat" ] || ln -sf "$GEOSITE_SRC" "$HOME_DIR/geosite.dat" 2>/dev/null
+}
+
+# 日志轮转：启动时若日志超过 logfile_maxsize(MB)，滚动为 .1/.2/...，
+# 最多保留 logfile_maxbackups 份。/var/log 是 tmpfs，重启即清空。
+_rotate_log() {
+	config_load "$NAME"
+	local size_mb backups bytes cur i
+	config_get size_mb  "settings" "logfile_maxsize"    "1"
+	config_get backups "settings" "logfile_maxbackups" "1"
+
+	[ -f "$LOG" ] || return 0
+	bytes=$((size_mb * 1024 * 1024))
+	cur=$(wc -c < "$LOG" 2>/dev/null || echo 0)
+	[ "$cur" -lt "$bytes" ] && return 0
+
+	i=$((backups - 1))
+	while [ "$i" -ge 1 ]; do
+		[ -f "${LOG}.$i" ] && mv -f "${LOG}.$i" "${LOG}.$((i+1))" 2>/dev/null
+		i=$((i - 1))
+	done
+	mv -f "$LOG" "${LOG}.1" 2>/dev/null
+	: > "$LOG"
+	echo "[hun] log rotated (${cur} bytes > ${bytes} bytes, backups=$backups)" >> "$LOG"
+}
+
+# Find mihomo PID (from procd)
+_get_pid() {
+	pidof mihomo 2>/dev/null | awk '{print $1}'
+}
+
+start_service() {
+	_ensure_logdir
+	_ensure_geodata
+	_rotate_log
+	config_load "$NAME"
+
+	# NOTE: do NOT check the 'enabled' UCI option here.
+	# Whether the service starts on boot is controlled by the rc.d symlink
+	# (via /etc/init.d/hun enable|disable).
+	# Checking UCI enabled here would silently block the LuCI "Start" button,
+	# because setInitAction('start') calls this function directly without
+	# first toggling the UCI flag.
+
+	local config_file
+	config_get config_file "settings" "config_file" "$CONF"
+
+	if [ ! -f "$config_file" ]; then
+		echo "[hun] ERROR: configuration file not found: $config_file" >> "$LOG"
+		return 1
+	fi
+
+	chmod 0600 "$config_file"
+
+	# mihomo 在启动时自行校验配置，非法即退出，由 procd respawn 处理。
+
+	procd_open_instance "$NAME"
+		# exec 替换 shell，procd 直接跟踪 mihomo 的 PID；
+		# -d 指定运行目录（geo 数据、cache.db），-f 指定配置文件
+		procd_set_param command /bin/sh
+		procd_append_param command -c "exec $PROG -d '$HOME_DIR' -f '$config_file' >> '$LOG' 2>&1"
+
+		procd_set_param limits core="unlimited"
+		procd_set_param limits nofile="1000000 1000000"
+		procd_set_param pidfile /var/run/hun.pid
+		procd_set_param respawn
+		procd_set_param stderr 1
+	procd_close_instance
+
+	echo "[hun] Service started." >> "$LOG"
+}
+
+reload_service() {
+	_ensure_logdir
+
+	# Use rc.d symlink to check enabled status, not UCI enabled option.
+	if ! /etc/init.d/hun enabled 2>/dev/null; then
+		stop
+		return 0
+	fi
+
+	if /etc/init.d/hun running 2>/dev/null; then
+		return 0
+	fi
+
+	start
+}
+
+stop_service() {
+	_ensure_logdir
+	echo "[hun] Service stopping." >> "$LOG"
+}
+
+service_triggers() {
+	procd_add_reload_trigger "$NAME"
+}
+
+# mihomo 无 SIGHUP 配置重载（信号只用于终止），配置热更新走 API
+# PUT /configs?force=true 需要 external-controller；这里用重启实现，
+# 保证编辑 config.yaml 保存后必然生效。
+hot_reload() {
+	_ensure_logdir
+	local pid
+	pid="$(_get_pid)"
+	if [ -n "$pid" ]; then
+		echo "[hun] hot_reload: mihomo 无 SIGHUP 重载，执行 restart." >> "$LOG"
+		stop
+		start
+	else
+		echo "[hun] Hot-reload unavailable (no pid), starting." >> "$LOG"
+		start
+	fi
+}

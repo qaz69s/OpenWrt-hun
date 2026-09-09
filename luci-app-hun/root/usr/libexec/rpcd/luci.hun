@@ -1,0 +1,156 @@
+#!/bin/sh
+
+readonly NAME="hun"
+readonly PROG="/usr/bin/mihomo"
+readonly LOG="/var/log/hun.log"
+readonly CONF="/etc/hun/config.yaml"
+
+. /lib/functions.sh
+. /usr/share/libubox/jshn.sh
+
+is_enabled()      { "/etc/init.d/${1}" enabled; }
+is_running()      { [ "$(ubus call service list "{ 'name': '$1' }" \
+                        | jsonfilter -q -e "@['$1'].instances[*].running" \
+                        | uniq)" = 'true' ]; }
+# mihomo -v 输出首行形如：Mihomo Meta v1.19.30 linux amd64 ...
+# 只抽 semver（不依赖字段位置），无二进制时输出空 → LuCI 判定未安装
+get_version()     { "$PROG" -v 2>/dev/null | grep -om1 '[0-9][0-9]*\.[0-9][0-9]*\.[0-9][0-9]*' | head -1; }
+print_json_bool() { json_init; json_add_boolean "$1" "$2"; json_dump; json_cleanup; }
+
+# ── get_init_status ────────────────────────────────────────────────────────────
+_get_mihomo_pid() {
+	local pid
+	# 方法1: pidof（OpenWrt busybox 支持）
+	pid="$(pidof mihomo 2>/dev/null | awk '{print $1}')"
+	# 方法2: ps 匹配 mihomo
+	[ -z "$pid" ] && pid="$(ps 2>/dev/null | awk '$0~/[m]ihomo/{print $1; exit}')"
+	echo "$pid"
+}
+
+get_proc_uptime() {
+	local pid="${1:-$(_get_mihomo_pid)}"
+	[ -z "$pid" ] && { echo 0; return; }
+	local starttime sys_uptime
+	starttime="$(awk '{print $22}' /proc/"$pid"/stat 2>/dev/null)"
+	sys_uptime="$(awk '{printf "%d", $1}' /proc/uptime 2>/dev/null)"
+	[ -z "$starttime" ] || [ -z "$sys_uptime" ] && { echo 0; return; }
+	echo $(( sys_uptime - starttime / 100 ))
+}
+
+get_proc_mem_mb() {
+	local pid="${1:-$(_get_mihomo_pid)}"
+	[ -z "$pid" ] && { echo 0; return; }
+	# VmRSS 单位 kB，转成 MB 保留一位小数
+	awk '/VmRSS/{printf "%.1f", $2/1024; exit}' /proc/"$pid"/status 2>/dev/null || echo 0
+}
+
+get_init_status() {
+	local name="${1:-$NAME}"
+	local version; version="$(get_version)"
+	local running=0
+	is_running "$name" && running=1
+	local uptime=0 mem=0
+	if [ "$running" = "1" ]; then
+		local pid; pid="$(_get_mihomo_pid)"
+		uptime="$(get_proc_uptime "$pid")"
+		mem="$(get_proc_mem_mb "$pid")"
+	fi
+	json_init
+	json_add_object "$name"
+	if is_enabled "$name"; then json_add_boolean 'enabled' '1'
+	else                        json_add_boolean 'enabled' '0'; fi
+	json_add_boolean 'running' "$running"
+	json_add_string  'version' "$version"
+	json_add_int     'uptime'  "${uptime:-0}"
+	json_add_string  'mem'     "${mem:-0}"
+	json_close_object
+	json_dump; json_cleanup
+}
+
+# ── get_mem ────────────────────────────────────────────────────────────────────
+get_mem() {
+	local pid mem
+	pid="$(_get_mihomo_pid)"
+	if [ -n "$pid" ]; then
+		mem="$(awk '/VmRSS/{printf "%.1f", $2/1024; exit}' /proc/"$pid"/status 2>/dev/null)"
+	fi
+	json_init
+	json_add_string 'mem' "${mem:-0}"
+	json_dump; json_cleanup
+}
+
+
+set_init_action() {
+	local action="$1" cmd
+	case $action in
+		enable)
+			cmd="/etc/init.d/${NAME} enable \
+			  && uci set ${NAME}.settings.enabled=1 \
+			  && uci commit ${NAME}" ;;
+		disable)
+			cmd="/etc/init.d/${NAME} disable \
+			  && uci set ${NAME}.settings.enabled=0 \
+			  && uci commit ${NAME}" ;;
+		start|stop|restart)
+			cmd="/etc/init.d/${NAME} ${action}" ;;
+		reload_config)
+			cmd="/etc/init.d/${NAME} hot_reload" ;;
+		enable_start)
+			cmd="/etc/init.d/${NAME} enable \
+			  && uci set ${NAME}.settings.enabled=1 \
+			  && uci commit ${NAME} \
+			  && /etc/init.d/${NAME} start" ;;
+	esac
+	if [ -n "$cmd" ] && eval "$cmd" >/dev/null 2>&1; then
+		print_json_bool "result" '1'
+	else
+		print_json_bool "result" '0'
+	fi
+}
+
+# ── clear_log ──────────────────────────────────────────────────────────────────
+clear_log() {
+	if : > "$LOG" 2>/dev/null; then
+		print_json_bool "result" '1'
+	else
+		print_json_bool "result" '0'
+	fi
+}
+
+# ── RPC dispatcher ─────────────────────────────────────────────────────────────
+case "$1" in
+	list)
+		json_init
+		json_add_object "getInitStatus"
+			json_add_string 'name' "name"
+		json_close_object
+		json_add_object "getMem"
+			json_add_string 'name' "name"
+		json_close_object
+		json_add_object "setInitAction"
+			json_add_string 'name'   "name"
+			json_add_string 'action' "action"
+		json_close_object
+		json_add_object "clearLog"; json_close_object
+		json_dump; json_cleanup
+		;;
+	call)
+		case "$2" in
+			getInitStatus)
+				read -r input; json_load "$input"
+				json_get_var name 'name'; json_cleanup
+				[ "$name" = "$NAME" ] || { print_json_bool "result" '0'; exit 0; }
+				get_init_status "$name" ;;
+			getMem)
+				read -r input; json_load "$input"
+				json_get_var name 'name'; json_cleanup
+				[ "$name" = "$NAME" ] || { print_json_bool "result" '0'; exit 0; }
+				get_mem "$name" ;;
+			setInitAction)
+				read -r input; json_load "$input"
+				json_get_var action 'action'; json_cleanup
+				set_init_action "$action" ;;
+			clearLog)
+				clear_log ;;
+		esac ;;
+esac

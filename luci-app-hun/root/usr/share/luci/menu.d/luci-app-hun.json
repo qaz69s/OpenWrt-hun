@@ -1,0 +1,10 @@
+{
+	"admin/services/hun": {
+		"title": "Hun",
+		"order": 99,
+		"action": {
+			"type": "view",
+			"path": "hun/overview"
+		}
+	}
+}

@@ -1,0 +1,36 @@
+{
+	"luci-app-hun": {
+		"description": "Grant UCI access to LuCI app Hun",
+		"read": {
+			"ubus": {
+				"luci.hun": [
+					"getInitStatus",
+					"getMem"
+				]
+			},
+			"file": {
+				"/etc/hun/config.yaml": [ "read" ],
+				"/var/log/hun.log":    [ "read" ]
+			},
+			"uci": [ "hun" ]
+		},
+		"write": {
+			"ubus": {
+				"luci.hun": [
+					"setInitAction",
+					"clearLog"
+				],
+				"uci": [
+					"get",
+					"set",
+					"commit"
+				]
+			},
+			"file": {
+				"/etc/hun/config.yaml": [ "write" ],
+				"/var/log/hun.log":    [ "write" ]
+			},
+			"uci": [ "hun" ]
+		}
+	}
+}

@@ -1,0 +1,26 @@
+#!/bin/sh
+# uci-defaults: first-install initialisation for luci-app-hun.
+# The hun package already owns /etc/init.d/hun, /etc/config/hun,
+# /etc/hun/config.yaml and /usr/bin/mihomo; this script only wires
+# up permissions, geodata symlinks and autostart.
+
+# Fix rpcd helper permissions (package installer may not set +x on some builds)
+chmod +x /usr/libexec/rpcd/luci.hun
+
+# Protect YAML config (may contain subscription secrets)
+chmod 0600 /etc/hun/config.yaml 2>/dev/null || true
+
+# Geo data symlinks (v2ray-geodata ships /usr/share/v2ray/{geoip,geosite}.dat)
+ln -sf ../v2ray/geoip.dat /usr/share/hun/geoip.dat 2>/dev/null || true
+ln -sf ../v2ray/geosite.dat /usr/share/hun/geosite.dat 2>/dev/null || true
+mkdir -p /etc/hun
+ln -sf /usr/share/v2ray/geoip.dat /etc/hun/geoip.dat 2>/dev/null || true
+ln -sf /usr/share/v2ray/geosite.dat /etc/hun/geosite.dat 2>/dev/null || true
+
+# Restart rpcd so the new ACL / helper are picked up immediately
+/etc/init.d/rpcd restart
+
+# Register autostart (user controls actual start via LuCI)
+/etc/init.d/hun enable
+
+return 0
