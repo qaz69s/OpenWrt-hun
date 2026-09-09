@@ -1,6 +1,6 @@
 # OpenWrt-hun
 
-OpenWrt 25.12 (apk) 两包结构：**hun**（mihomo TUN 模式代理守护进程，预编译二进制）+ **luci-app-hun**（LuCI 管理界面）。
+OpenWrt 25.12 (apk) 两包结构：**hun**（mihomo TUN 模式代理守护进程，源码编译）+ **luci-app-hun**（LuCI 管理界面）。
 
 mihomo 是 Go 编写的 Clash Meta 内核：https://github.com/MetaCubeX/mihomo
 
@@ -11,18 +11,12 @@ hun 运行 mihomo **TUN 模式**：由 mihomo 自己创建 `utun` 设备并管�
 流量**——LAN 客户端不受影响。需要整网透明代理时不要用此包（参考 horse/joey 等
 eBPF 方案，或 mihomo + nftables hijack 架构）。
 
-## 包结构
+## 编译方式
 
-- `hun/` — 守护进程包，从 GitHub Releases 下载预编译 `mihomo`（musl 静态，
-  资产 `mihomo-linux-<amd64|arm64>-vX.Y.Z.gz`），安装为 `/usr/bin/mihomo`，
-  运行目录 `/etc/hun/`（配置 + geo 数据软链 + cache.db），带 procd init 脚本
-  和 UCI 配置
-- `luci-app-hun/` — LuCI 界面包（overview 单页三标签：控制 / 配置 / 日志 +
-  rpcd handler），布局克隆自 OpenWrt-horse
-
-## 编译
-
-把两个目录放进 OpenWrt buildroot 的 `package/new/`（或 feed 内），然后：
+与 kun 相同：**构建树内按架构源码编译 mihomo**（`golang-package.mk` +
+`GoBinPackage`，`GO_ARCH_DEPENDS` 自动按当前目标架构交叉编译），不是下载
+预编译包。首次编译会先构建 `golang/host` 工具链，耗时较长（数分钟），
+之后增量编译只重编 mihomo。
 
 ```sh
 make package/hun/compile
@@ -40,20 +34,29 @@ apk add hun luci-app-hun
 
 ## 版本
 
-`hun/Makefile` 中 `MIHOMO_VERSION` 默认 `latest`（每次构建查询 GitHub，
-跳过 `Prerelease-Alpha` 等 prerelease 取最新正式 tag，如 v1.19.30；查询失败
-回退 v1.19.30）。可命令行覆盖锁版：
+`hun/Makefile` 中 `MIHOMO_VERSION` 默认锁 `v1.19.30`（git tag，kun 同款
+pinned 风格，可复现）。可命令行覆盖：
 
 ```sh
 make package/hun/compile MIHOMO_VERSION=v1.19.21
 ```
 
+包版本号 = `MIHOMO_VERSION` 去掉 `v`（如 `1.19.30`），并注入
+`constant.Version` LDFLAGS，`mihomo -v` 显示对应版本。
+
 ## 架构支持
 
-| OpenWrt ARCH | mihomo 资产 | 说明 |
-|---|---|---|
-| x86_64 | `mihomo-linux-amd64-vX.Y.Z.gz` | |
-| aarch64 | `mihomo-linux-arm64-vX.Y.Z.gz` | |
+Go 源码交叉编译，凡 Go 工具链支持的 OpenWrt 架构均可（`GO_ARCH_DEPENDS`
+自动约束菜单可见性，含 aarch64/arm/x86_64/mips/mipsel/riscv64 等）。
+编译标签 `with_gvisor`（TUN gvisor stack，与 kun 一致）。
+
+## 包结构
+
+- `hun/` — 守护进程包：源码编译 mihomo 安装为 `/usr/bin/mihomo`，
+  运行目录 `/etc/hun/`（配置 + geo 数据软链 + cache.db），带 procd init
+  脚本和 UCI 配置
+- `luci-app-hun/` — LuCI 界面包（overview 单页三标签：控制 / 配置 / 日志 +
+  rpcd handler），布局克隆自 OpenWrt-horse
 
 ## 使用
 
