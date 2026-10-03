@@ -75,14 +75,6 @@ define Package/hun/install
 	$(LN) ../v2ray/geosite.dat $(1)/usr/share/hun/geosite.dat
 endef
 
-define Package/hun/postinst
-#!/bin/sh
-[ -z "$${IPKG_INSTROOT}" ] && {
-	[ -x /etc/init.d/hun ] && /etc/init.d/hun enable 2>/dev/null || true
-}
-exit 0
-endef
-
 define Package/hun/prerm
 #!/bin/sh
 [ -z "$${IPKG_INSTROOT}" ] && {

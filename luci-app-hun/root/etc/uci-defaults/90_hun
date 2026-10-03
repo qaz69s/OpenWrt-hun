@@ -2,7 +2,7 @@
 # uci-defaults: first-install initialisation for luci-app-hun.
 # The hun package already owns /etc/init.d/hun, /etc/config/hun,
 # /etc/hun/config.yaml and /usr/bin/mihomo; this script only wires
-# up permissions, geodata symlinks and autostart.
+# up permissions and geodata symlinks.
 
 # Fix rpcd helper permissions (package installer may not set +x on some builds)
 chmod +x /usr/libexec/rpcd/luci.hun
@@ -20,7 +20,9 @@ ln -sf /usr/share/v2ray/geosite.dat /etc/hun/geosite.dat 2>/dev/null || true
 # Restart rpcd so the new ACL / helper are picked up immediately
 /etc/init.d/rpcd restart
 
-# Register autostart (user controls actual start via LuCI)
-/etc/init.d/hun enable
+# 出厂默认：不预设开机自启（不创建 /etc/rc.d/S99hun）、不启动服务。
+# 「开机自启」与「启动」都由用户在 LuCI 里自行操作。
+# 这里刻意不调用 enable/disable：升级/重装时会重跑本脚本（default_postinst
+# 里没有升级判断），一旦调用就会覆盖用户已经做出的选择。
 
 return 0
