@@ -4,7 +4,7 @@ PKG_NAME:=hun
 # mihomo 引擎版本（git tag）。kun 同款源码编译模式：默认锁 v1.19.30，
 # 可命令行覆盖（需与 LDFLAGS 版本一致）：
 #   make package/hun/compile MIHOMO_VERSION=v1.19.21
-MIHOMO_VERSION ?= v1.19.30
+MIHOMO_VERSION ?= v1.19.31
 PKG_VERSION := $(shell echo '$(MIHOMO_VERSION)' | sed -E 's/^v//')
 PKG_RELEASE:=1
 PKG_LICENSE:=GPL-3.0-only
