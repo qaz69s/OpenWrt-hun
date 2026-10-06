@@ -155,7 +155,7 @@ return baseclass.extend({
 			{ key: 'panel',   svg: SVG_PANEL,    label: _('面板'), color: '#8e44ad', hover: 'rgba(142,68,173,.10)' },
 			];
 		var buttons = {};
-		var btnRow  = E('div', { style: 'display:flex;gap:8px;flex-wrap:wrap;' });
+		var btnRow  = E('div', { class: 'jy-btnrow', style: 'display:flex;gap:8px;flex-wrap:wrap;' });
 
 		BTN_DEFS.forEach(function (def) {
 			var btn = E('button', {

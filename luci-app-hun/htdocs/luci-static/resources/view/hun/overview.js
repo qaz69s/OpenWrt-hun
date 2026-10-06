@@ -326,7 +326,7 @@ return view.extend({
 				'.jy-lat-loading{animation:jy-pulse 1s ease-in-out infinite;}',
 				'@keyframes jy-rock{0%{transform:rotate(-16deg)}38%{transform:rotate(23deg)}48%{transform:rotate(14deg)}55%{transform:rotate(16deg)}88%{transform:rotate(-23deg)}96%{transform:rotate(-14deg)}100%{transform:rotate(-16deg)}}',
 
-				'@media(max-width:480px){.jy-card{padding:12px;} .jy-nav{margin-bottom:12px;} .jy-tab{padding:9px 12px !important;font-size:13px !important;} .jy-metrics{grid-template-columns:1fr 1fr !important;}}',
+				'@media(max-width:480px){.jy-card{padding:12px;} .jy-nav{margin-bottom:12px;} .jy-tab{padding:9px 12px !important;font-size:13px !important;} .jy-metrics{grid-template-columns:1fr 1fr !important;} .jy-btnrow{display:grid !important;grid-template-columns:repeat(4,1fr);gap:6px !important;flex-wrap:nowrap !important;} .jy-btnrow>button{padding:7px 2px !important;gap:4px !important;font-size:12px !important;justify-content:center !important;white-space:nowrap !important;overflow:hidden !important;}}',
 
 				'textarea.jy-editor{',
 				'scrollbar-width:thin;',
