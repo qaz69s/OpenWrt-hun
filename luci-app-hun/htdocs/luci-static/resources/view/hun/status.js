@@ -80,7 +80,7 @@ return baseclass.extend({
 			statusBadge,
 		]);
 		var subtitle = E('div', { style: 'font-size:12px;font-weight:500;color:var(--jy-muted);margin-bottom:20px;' }, [
-			_('基于 Go 的 Clash Meta 内核（mihomo 引擎）TUN 模式代理，仅代理路由器本机流量。'),
+			_('基于 mihomo TUN 模式的透明代理。'),
 		]);
 
 		/* ── 指标格子 ── */
